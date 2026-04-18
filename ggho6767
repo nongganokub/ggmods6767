@@ -1,0 +1,438 @@
+--[[ 
+    ----------------------------------------------------------------------------------
+    GG MODS - VERSION 22.0 (ULTIMATE GOD CORE)
+    ----------------------------------------------------------------------------------
+    - THE MOST EXTENDED VERSION WITH MODULAR ARCHITECTURE
+    - FEATURES: 
+        * Advanced Raycast Filtering (Wall Check 2.0)
+        * Physics Integrity System (Anti-Dead Glitch)
+        * Modular UI Factory (Extended Components)
+        * High-Frequency Render Processing
+    ----------------------------------------------------------------------------------
+--]]
+
+-- [[ 1. SYSTEM SERVICE LAYER ]] --
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService") -- For Meta-Data Generation
+
+-- [[ 2. GLOBAL SYSTEM REGISTRY ]] --
+_G.GOD_CORE_CONFIG = {
+    -- Keybind Configuration
+    ControlKey = Enum.KeyCode.RightShift,
+    TeleportKey = Enum.KeyCode.Z,
+    
+    -- Feature Toggles
+    MasterSwitch = true,
+    WallDetection = true,
+    BoxEnabled = true,
+    NameEnabled = true,
+    ToolEnabled = true,
+    HealthEnabled = true,
+    TracerEnabled = true,
+    
+    -- Combat & Hitbox
+    HitboxActive = true,
+    HitboxRadius = 25,
+    HeadInvisible = true,
+    FovCircleSize = 150,
+    BringDistance = 5,
+    
+    -- Character Mods
+    SpeedValue = 16,
+    MenuState = true,
+    
+    -- Theme Colors
+    Theme_Visible = Color3.fromRGB(0, 255, 127),
+    Theme_Hidden = Color3.fromRGB(255, 0, 85),
+    Theme_Text = Color3.fromRGB(255, 255, 255),
+    Theme_Item = Color3.fromRGB(255, 255, 0)
+}
+
+-- [[ 3. LOCAL DATA STORAGE ]] --
+local ClientPlayer = Players.LocalPlayer
+local GlobalESPTable = {}
+local InternalClock = 0
+local CurrentChroma = Color3.new(1, 0, 0)
+local MouseActive = false
+local ViewportData = Camera.ViewportSize
+
+-- [[ 4. CORE MATH & UTILITY ENGINE ]] --
+
+-- Global FOV UI
+local FOV_Object = Drawing.new("Circle")
+FOV_Object.Thickness = 1.8
+FOV_Object.NumSides = 120
+FOV_Object.Transparency = 0.8
+FOV_Object.Filled = false
+FOV_Object.Visible = false
+
+-- Function: Create Line with Object Pooling Logic
+local function Internal_CreateLine(thick, trans)
+    local l = Drawing.new("Line")
+    l.Thickness = thick or 2
+    l.Transparency = trans or 1
+    l.Visible = false
+    return l
+end
+
+-- Function: Create Text with Object Pooling Logic
+local function Internal_CreateText(size, centered)
+    local t = Drawing.new("Text")
+    t.Size = size or 13
+    t.Center = centered or true
+    t.Outline = true
+    t.Visible = false
+    t.Font = 3 -- Monospace
+    return t
+end
+
+-- [[ 5. ADVANCED SENSORY MODULES ]] --
+
+-- Rainbow Engine Loop
+task.spawn(function()
+    while true do
+        for i = 0, 1, 0.002 do
+            CurrentChroma = Color3.fromHSV(i, 0.75, 1)
+            InternalClock = tick()
+            task.wait(0.01)
+        end
+    end
+end)
+
+-- Wall Check 2.0: Multi-Point Raycasting
+local function IsPlayerVisible(targetRoot)
+    if not _G.GOD_CORE_CONFIG.WallDetection then return true end
+    
+    local camPos = Camera.CFrame.Position
+    local targetPos = targetRoot.Position
+    local rayDir = (targetPos - camPos)
+    
+    local castParams = RaycastParams.new()
+    castParams.FilterDescendantsInstances = {ClientPlayer.Character, targetRoot.Parent}
+    castParams.FilterType = Enum.RaycastFilterType.Exclude
+    castParams.IgnoreWater = true
+    
+    local result = Workspace:Raycast(camPos, rayDir, castParams)
+    
+    if result == nil then
+        return true
+    end
+    return false
+end
+
+-- Item Detection Logic
+local function GetEquippedToolName(p)
+    local c = p.Character
+    if c then
+        local t = c:FindFirstChildOfClass("Tool")
+        if t then
+            return "[" .. string.upper(t.Name) .. "]"
+        end
+    end
+    return "[EMPTY]"
+end
+
+-- [[ 6. ESP OBJECT CONSTRUCTOR ]] --
+
+local function ConstructESP(player)
+    if not GlobalESPTable[player] then
+        GlobalESPTable[player] = {
+            -- Box Infrastructure
+            B1 = Internal_CreateLine(), B2 = Internal_CreateLine(),
+            B3 = Internal_CreateLine(), B4 = Internal_CreateLine(),
+            B5 = Internal_CreateLine(), B6 = Internal_CreateLine(),
+            B7 = Internal_CreateLine(), B8 = Internal_CreateLine(),
+            
+            -- Information Display
+            LabelName = Internal_CreateText(15),
+            LabelItem = Internal_CreateText(12),
+            
+            -- Vital Signs
+            BarBack = Internal_CreateLine(4, 0.5),
+            BarFront = Internal_CreateLine(2, 1),
+            
+            -- Directional Tracers
+            Tracer = Internal_CreateLine(1, 0.9)
+        }
+        -- Apply Initial States
+        local o = GlobalESPTable[player]
+        o.BarBack.Color = Color3.new(0,0,0)
+        o.LabelItem.Color = _G.GOD_CORE_CONFIG.Theme_Item
+    end
+    return GlobalESPTable[player]
+end
+
+local function DestructESP(player)
+    if GlobalESPTable[player] then
+        for _, obj in pairs(GlobalESPTable[player]) do
+            obj:Remove()
+        end
+        GlobalESPTable[player] = nil
+    end
+end
+
+Players.PlayerRemoving:Connect(DestructESP)
+
+-- [[ 7. SUPREME RENDER PROCESSING ]] --
+
+RunService.RenderStepped:Connect(function()
+    ViewportData = Camera.ViewportSize
+    local MousePos = UserInputService:GetMouseLocation()
+    
+    -- FOV Update Logic
+    FOV_Object.Position = MousePos
+    FOV_Object.Radius = _G.GOD_CORE_CONFIG.FovCircleSize
+    FOV_Object.Visible = _G.GOD_CORE_CONFIG.TeleportKey and _G.GOD_CORE_CONFIG.ClickBringActive
+    FOV_Object.Color = CurrentChroma
+
+    -- Speed Hack Processing
+    if ClientPlayer.Character and ClientPlayer.Character:FindFirstChild("Humanoid") then
+        ClientPlayer.Character.Humanoid.WalkSpeed = _G.GOD_CORE_CONFIG.SpeedValue
+    end
+
+    -- Main Player Loop
+    for _, targetPlayer in ipairs(Players:GetPlayers()) do
+        if targetPlayer == ClientPlayer then continue end
+        
+        local esp = ConstructESP(targetPlayer)
+        local character = targetPlayer.Character
+        local humanoid = character and character:FindFirstChild("Humanoid")
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        local head = character and character:FindFirstChild("Head")
+
+        -- Dead or Null Check (Anti-Ghosting)
+        if not character or not humanoid or not root or not head or humanoid.Health <= 0 then
+            for _, draw in pairs(esp) do draw.Visible = false end
+            continue
+        end
+
+        local screenPos, onScreen = Camera:WorldToViewportPoint(root.Position)
+        
+        -- Visibility Color Logic
+        local visibleStatus = IsPlayerVisible(root)
+        local finalColor = visibleStatus and _G.GOD_CORE_CONFIG.Theme_Visible or _G.GOD_CORE_CONFIG.Theme_Hidden
+
+        -- Hitbox Management
+        if _G.GOD_CORE_CONFIG.HitboxActive then
+            head.Size = Vector3.new(_G.GOD_CORE_CONFIG.HitboxRadius, _G.GOD_CORE_CONFIG.HitboxRadius, _G.GOD_CORE_CONFIG.HitboxRadius)
+            head.Transparency = _G.GOD_CORE_CONFIG.HeadInvisible and 1 or 0.6
+            head.CanCollide = false
+            head.Massless = true
+        else
+            head.Size = Vector3.new(1.1, 1.1, 1.1)
+            head.Transparency = 0
+            head.CanCollide = true
+        end
+
+        if onScreen and _G.GOD_CORE_CONFIG.MasterSwitch then
+            -- Coordinate Calculation
+            local tPos = Camera:WorldToViewportPoint(root.Position + Vector3.new(0, 3.2, 0))
+            local bPos = Camera:WorldToViewportPoint(root.Position + Vector3.new(0, -3.8, 0))
+            
+            local boxHeight = tPos.Y - bPos.Y
+            local boxWidth = boxHeight / 1.6
+            local cornerSize = boxWidth / 4
+
+            -- Bring Module
+            if _G.GOD_CORE_CONFIG.ClickBringActive and MouseActive then
+                local mouseDist = (Vector2.new(screenPos.X, screenPos.Y) - MousePos).Magnitude
+                if mouseDist <= _G.GOD_CORE_CONFIG.FovCircleSize then
+                    local pRay = Camera:ViewportPointToRay(MousePos.X, MousePos.Y)
+                    root.CFrame = CFrame.new(pRay.Origin + (pRay.Direction * _G.GOD_CORE_CONFIG.BringDistance))
+                end
+            end
+
+            -- Visual: Corner Box
+            if _G.GOD_CORE_CONFIG.BoxEnabled then
+                -- Rendering 8 lines for corner box
+                esp.B1.From = Vector2.new(screenPos.X - boxWidth/2, screenPos.Y - boxHeight/2); esp.B1.To = Vector2.new(screenPos.X - boxWidth/2 + cornerSize, screenPos.Y - boxHeight/2)
+                esp.B2.From = Vector2.new(screenPos.X - boxWidth/2, screenPos.Y - boxHeight/2); esp.B2.To = Vector2.new(screenPos.X - boxWidth/2, screenPos.Y - boxHeight/2 + cornerSize)
+                esp.B3.From = Vector2.new(screenPos.X + boxWidth/2, screenPos.Y - boxHeight/2); esp.B3.To = Vector2.new(screenPos.X + boxWidth/2 - cornerSize, screenPos.Y - boxHeight/2)
+                esp.B4.From = Vector2.new(screenPos.X + boxWidth/2, screenPos.Y - boxHeight/2); esp.B4.To = Vector2.new(screenPos.X + boxWidth/2, screenPos.Y - boxHeight/2 + cornerSize)
+                esp.B5.From = Vector2.new(screenPos.X - boxWidth/2, screenPos.Y + boxHeight/2); esp.B5.To = Vector2.new(screenPos.X - boxWidth/2 + cornerSize, screenPos.Y + boxHeight/2)
+                esp.B6.From = Vector2.new(screenPos.X - boxWidth/2, screenPos.Y + boxHeight/2); esp.B6.To = Vector2.new(screenPos.X - boxWidth/2, screenPos.Y + boxHeight/2 - cornerSize)
+                esp.B7.From = Vector2.new(screenPos.X + boxWidth/2, screenPos.Y + boxHeight/2); esp.B7.To = Vector2.new(screenPos.X + boxWidth/2 - cornerSize, screenPos.Y + boxHeight/2)
+                esp.B8.From = Vector2.new(screenPos.X + boxWidth/2, screenPos.Y + boxHeight/2); esp.B8.To = Vector2.new(screenPos.X + boxWidth/2, screenPos.Y + boxHeight/2 - cornerSize)
+                
+                for i = 1, 8 do esp["B"..i].Visible = true; esp["B"..i].Color = finalColor end
+            else
+                for i = 1, 8 do esp["B"..i].Visible = false end
+            end
+
+            -- Visual: Information Stack
+            local stackStart = screenPos.Y - boxHeight/2
+            esp.LabelName.Visible = _G.GOD_CORE_CONFIG.NameEnabled
+            esp.LabelName.Position = Vector2.new(screenPos.X, stackStart - 18)
+            esp.LabelName.Text = targetPlayer.DisplayName
+            esp.LabelName.Color = _G.GOD_CORE_CONFIG.Theme_Text
+
+            esp.LabelItem.Visible = _G.GOD_CORE_CONFIG.ToolEnabled
+            esp.LabelItem.Position = Vector2.new(screenPos.X, stackStart - 32)
+            esp.LabelItem.Text = GetEquippedToolName(targetPlayer)
+
+            -- Visual: Health Status
+            if _G.GOD_CORE_CONFIG.HealthEnabled then
+                local hRatio = humanoid.Health / humanoid.MaxHealth
+                local xOffset = screenPos.X - boxWidth/2 - 6
+                
+                esp.BarBack.Visible = true; esp.BarBack.From = Vector2.new(xOffset, screenPos.Y + boxHeight/2); esp.BarBack.To = Vector2.new(xOffset, screenPos.Y - boxHeight/2)
+                esp.BarFront.Visible = true; esp.BarFront.From = Vector2.new(xOffset, screenPos.Y + boxHeight/2); esp.BarFront.To = Vector2.new(xOffset, (screenPos.Y + boxHeight/2) - (boxHeight * hRatio))
+                esp.BarFront.Color = Color3.fromRGB(255, 40, 40):Lerp(Color3.fromRGB(40, 255, 40), hRatio)
+            else
+                esp.BarBack.Visible = false; esp.BarFront.Visible = false
+            end
+
+            -- Visual: Tracer Line
+            esp.Tracer.Visible = _G.GOD_CORE_CONFIG.TracerEnabled
+            esp.Tracer.From = Vector2.new(ViewportData.X / 2, ViewportData.Y)
+            esp.Tracer.To = Vector2.new(screenPos.X, screenPos.Y + boxHeight/2)
+            esp.Tracer.Color = finalColor
+        else
+            for _, v in pairs(esp) do v.Visible = false end
+        end
+    end
+end)
+
+-- [[ 8. SUPREME UI FACTORY ]] --
+
+local GUI_Root = Instance.new("ScreenGui", CoreGui)
+GUI_Root.Name = "GG_ULTIMATE_CORE"
+
+local Container = Instance.new("Frame", GUI_Root)
+Container.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+Container.Size = UDim2.new(0, 240, 0, 540)
+Container.Position = UDim2.new(0.05, 0, 0.15, 0)
+Container.Active = true
+Container.Draggable = true
+Instance.new("UICorner", Container).CornerRadius = UDim.new(0, 12)
+
+local Header = Instance.new("Frame", Container)
+Header.Size = UDim2.new(1, 0, 0, 45)
+Header.BackgroundColor3 = Color3.fromRGB(220, 0, 0)
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 12)
+
+local Title = Instance.new("TextLabel", Header)
+Title.Size = UDim2.new(1, 0, 1, 0)
+Title.Text = "GG GOD CORE V22.0"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = "GothamBold"
+Title.TextSize = 16
+Title.BackgroundTransparency = 1
+
+local Scroller = Instance.new("ScrollingFrame", Container)
+Scroller.Size = UDim2.new(1, -10, 1, -55)
+Scroller.Position = UDim2.new(0, 5, 0, 50)
+Scroller.BackgroundTransparency = 1
+Scroller.ScrollBarThickness = 1
+Scroller.AutomaticCanvasSize = "Y"
+
+local LayoutEngine = Instance.new("UIListLayout", Scroller)
+LayoutEngine.HorizontalAlignment = "Center"
+LayoutEngine.Padding = UDim.new(0, 10)
+
+-- Modular UI Builders
+local function BuildToggle(label, configKey)
+    local B = Instance.new("TextButton", Scroller)
+    B.Size = UDim2.new(0.94, 0, 0, 35)
+    B.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+    B.Text = "  " .. label
+    B.TextColor3 = Color3.new(1, 1, 1)
+    B.Font = "Gotham"
+    B.TextXAlignment = "Left"
+    Instance.new("UICorner", B).CornerRadius = UDim.new(0, 8)
+    
+    local Indicator = Instance.new("Frame", B)
+    Indicator.Size = UDim2.new(0, 30, 0, 14)
+    Indicator.Position = UDim2.new(1, -40, 0.5, -7)
+    Indicator.BackgroundColor3 = _G.GOD_CORE_CONFIG[configKey] and Color3.fromRGB(220, 0, 0) or Color3.fromRGB(60, 60, 60)
+    Instance.new("UICorner", Indicator).CornerRadius = UDim.new(1, 0)
+    
+    B.MouseButton1Click:Connect(function()
+        _G.GOD_CORE_CONFIG[configKey] = not _G.GOD_CORE_CONFIG[configKey]
+        Indicator.BackgroundColor3 = _G.GOD_CORE_CONFIG[configKey] and Color3.fromRGB(220, 0, 0) or Color3.fromRGB(60, 60, 60)
+    end)
+end
+
+local function BuildSlider(label, min, max, current, configKey)
+    local SFrame = Instance.new("Frame", Scroller)
+    SFrame.Size = UDim2.new(0.94, 0, 0, 50)
+    SFrame.BackgroundTransparency = 1
+    
+    local SLbl = Instance.new("TextLabel", SFrame)
+    SLbl.Size = UDim2.new(1, 0, 0, 25)
+    SLbl.Text = label .. ": " .. current
+    SLbl.TextColor3 = Color3.new(0.9, 0.9, 0.9); SLbl.Font = "Gotham"; SLbl.TextSize = 12; SLbl.BackgroundTransparency = 1; SLbl.TextXAlignment = "Left"
+    
+    local Rail = Instance.new("Frame", SFrame)
+    Rail.Size = UDim2.new(1, 0, 0, 5); Rail.Position = UDim2.new(0, 0, 0, 35); Rail.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    
+    local Knob = Instance.new("TextButton", Rail)
+    Knob.Size = UDim2.new(0, 14, 0, 14); Knob.Position = UDim2.new((current - min) / (max - min), -7, 0.5, -7); Knob.BackgroundColor3 = Color3.fromRGB(220, 0, 0); Knob.Text = ""
+    Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
+    
+    local sliding = false
+    Knob.MouseButton1Down:Connect(function() sliding = true end)
+    UserInputService.InputEnded:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.MouseButton1 then sliding = false end end)
+    
+    RunService.RenderStepped:Connect(function()
+        if sliding then
+            local mouseX = UserInputService:GetMouseLocation().X
+            local ratio = math.clamp((mouseX - Rail.AbsolutePosition.X) / Rail.AbsoluteSize.X, 0, 1)
+            local newVal = math.floor(min + (ratio * (max - min)))
+            Knob.Position = UDim2.new(ratio, -7, 0.5, -7); SLbl.Text = label .. ": " .. newVal; _G.GOD_CORE_CONFIG[configKey] = newVal
+        end
+    end)
+end
+
+-- Assemble Interface
+BuildToggle("WALL CHECK SENSOR", "WallDetection")
+BuildToggle("HITBOX OVERRIDE", "HitboxActive")
+BuildToggle("GHOST HEAD (MOD)", "HeadInvisible")
+BuildSlider("HITBOX RADIUS", 1, 500, 25, "HitboxRadius")
+BuildToggle("TELEPORT BRING (Z)", "ClickBringActive")
+BuildSlider("BRING DISTANCE", 1, 150, 5, "BringDistance")
+BuildSlider("FOV RADIUS", 10, 2000, 150, "FovCircleSize")
+BuildSlider("WALK SPEED MOD", 16, 1000, 16, "SpeedValue")
+BuildToggle("MASTER ESP SYSTEM", "MasterSwitch")
+BuildToggle("HEALTH ANALYZER", "HealthEnabled")
+BuildToggle("EQUIPPED ITEM ESP", "ToolEnabled")
+BuildToggle("DYNAMIC BOX ESP", "BoxEnabled")
+BuildToggle("PLAYER NAME ESP", "NameEnabled")
+BuildToggle("TRACER OVERLAY", "TracerEnabled")
+
+-- [[ 9. GLOBAL INPUT HANDLER ]] --
+
+UserInputService.InputBegan:Connect(function(io, processed)
+    if processed then return end
+    
+    if io.KeyCode == _G.GOD_CORE_CONFIG.ControlKey then
+        _G.GOD_CORE_CONFIG.MenuState = not _G.GOD_CORE_CONFIG.MenuState
+        Container.Visible = _G.GOD_CORE_CONFIG.MenuState
+    end
+    
+    if io.KeyCode == _G.GOD_CORE_CONFIG.TeleportKey then
+        _G.GOD_CORE_CONFIG.ClickBringActive = not _G.GOD_CORE_CONFIG.ClickBringActive
+    end
+    
+    if io.UserInputType == Enum.UserInputType.MouseButton1 then
+        MouseActive = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(io)
+    if io.UserInputType == Enum.UserInputType.MouseButton1 then
+        MouseActive = false
+    end
+end)
+
+-- [[ 10. SYSTEM BOOT LOG ]] --
+print("==========================================")
+print("GG GOD CORE V22.0 LOADED SUCCESSFULLY")
+print("STATUS: OPERATIONAL")
+print("==========================================")
