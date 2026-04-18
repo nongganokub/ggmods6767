@@ -40,8 +40,8 @@ _G.GOD_CORE_CONFIG = {
     HitboxActive = true,
     HitboxRadius = 25,
     HeadInvisible = true,
-    FovCircleSize = 150,
-    BringDistance = 5,
+    FovCircleSize = 300,
+    BringDistance = 30,
     
     -- Character Mods
     SpeedValue = 16,
@@ -67,7 +67,7 @@ local ViewportData = Camera.ViewportSize
 -- Global FOV UI
 local FOV_Object = Drawing.new("Circle")
 FOV_Object.Thickness = 1.8
-FOV_Object.NumSides = 120
+FOV_Object.NumSides = 300
 FOV_Object.Transparency = 0.8
 FOV_Object.Filled = false
 FOV_Object.Visible = false
