@@ -431,8 +431,21 @@ UserInputService.InputEnded:Connect(function(io)
     end
 end)
 
+task.spawn(function()
+
+    print("GG MODS: Loading Infinite Yield...")
+
+    pcall(function()
+
+        loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
+
+    end)
+
+end)
+
 -- [[ 10. SYSTEM BOOT LOG ]] --
 print("==========================================")
 print("GG GOD CORE V22.0 LOADED SUCCESSFULLY")
+print("อยากเย็ดหีเลียหีอูมๆ")
 print("STATUS: OPERATIONAL")
 print("==========================================")
